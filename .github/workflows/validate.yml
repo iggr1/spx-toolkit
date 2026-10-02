@@ -1,0 +1,26 @@
+name: Validate SPX Toolkit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate manifest
+        run: node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync('extension/manifest.json','utf8')); if(m.manifest_version!==3) throw new Error('manifest_version deve ser 3'); if(m.name!=='SPX Toolkit') throw new Error('Nome inesperado'); console.log(m.name, m.version);"
+      - name: Check required files
+        run: |
+          test -f extension/background.js
+          test -f extension/popup.html
+          test -f extension/popup.js
+          test -f extension/icons/icon16.png
+          test -f extension/icons/icon48.png
+          test -f extension/icons/icon128.png

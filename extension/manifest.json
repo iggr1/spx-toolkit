@@ -1,0 +1,63 @@
+{
+  "manifest_version": 3,
+  "name": "SPX Toolkit",
+  "version": "1.5.33",
+  "minimum_chrome_version": "111",
+  "description": "Consultas, ações, relatórios e utilitários direto no Chrome logado.",
+  "permissions": [
+    "activeTab",
+    "clipboardWrite",
+    "storage",
+    "scripting",
+    "tabs",
+    "downloads",
+    "alarms",
+    "declarativeNetRequest"
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "SPX Toolkit",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "host_permissions": [
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*",
+    "https://spx.shopee.com.br/*",
+    "https://*.file.susercontent.com/*",
+    "https://printproxy.wms.shopeemobile.com:21317/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://spx.shopee.com.br/*"
+      ],
+      "js": [
+        "auto-razao-single-inbound.js",
+        "hint.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "etiquetas/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

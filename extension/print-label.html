@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Imprimir etiqueta</title>
+  <link rel="stylesheet" href="print-label.css">
+</head>
+<body>
+  <header class="toolbar">
+    <div>
+      <strong id="labelTitle">Imprimir etiqueta</strong>
+      <span id="printInfo">Use o modal do navegador com margens nenhuma, escala 100% e cabeçalhos/rodapés desativados.</span>
+    </div>
+    <div class="actions">
+      <button id="printBtn">Abrir impressão</button>
+      <button id="openImageBtn">Abrir imagem</button>
+    </div>
+  </header>
+  <main class="viewerWrap">
+    <div class="sheet">
+      <div class="imageStage">
+        <img id="labelImage" alt="Etiqueta">
+      </div>
+    </div>
+  </main>
+  <script src="print-label.js"></script>
+</body>
+</html>

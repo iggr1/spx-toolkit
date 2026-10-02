@@ -1,0 +1,147 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --label-width: 70mm;
+  --label-height: 40mm;
+  --label-padding: 0mm;
+  --label-scale: 1;
+  --label-rotate: 0deg;
+  --label-fit: contain;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  background: #111827;
+  color: #f9fafb;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.toolbar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  background: #020617;
+  border-bottom: 1px solid #1f2937;
+}
+
+.toolbar strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.toolbar span {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #f97316;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+button + button {
+  background: #334155;
+}
+
+.viewerWrap {
+  min-height: calc(100vh - 64px);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sheet {
+  width: var(--label-width);
+  height: var(--label-height);
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.imageStage {
+  width: 100%;
+  height: 100%;
+  padding: var(--label-padding);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #fff;
+}
+
+#labelImage {
+  width: 100%;
+  height: 100%;
+  object-fit: var(--label-fit);
+  display: block;
+  transform: rotate(var(--label-rotate)) scale(var(--label-scale));
+  transform-origin: center center;
+}
+
+@page {
+  size: var(--label-width) var(--label-height);
+  margin: 0;
+}
+
+@media print {
+  .toolbar {
+    display: none;
+  }
+
+  html,
+  body {
+    width: var(--label-width);
+    height: var(--label-height);
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .viewerWrap,
+  .sheet,
+  .imageStage {
+    width: var(--label-width);
+    height: var(--label-height);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .imageStage {
+    padding: var(--label-padding);
+  }
+
+  #labelImage {
+    width: 100%;
+    height: 100%;
+    object-fit: var(--label-fit);
+    transform: rotate(var(--label-rotate)) scale(var(--label-scale));
+  }
+}

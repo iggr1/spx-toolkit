@@ -1,0 +1,11 @@
+Coloque aqui imagens de etiquetas.
+Formatos aceitos: PNG, JPG, JPEG, WEBP, GIF, BMP e SVG.
+
+A aba Etiquetas lista automaticamente as imagens desta pasta quando a extensão é recarregada.
+Para impressão correta em impressoras térmicas:
+- configure largura e altura da etiqueta no painel;
+- no modal do navegador, selecione o mesmo tamanho de papel;
+- use margens nenhuma;
+- use escala 100%;
+- desative cabeçalhos e rodapés;
+- calibre o sensor/gap da impressora se ela avançar várias etiquetas.

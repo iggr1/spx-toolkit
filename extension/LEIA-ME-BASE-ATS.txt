@@ -1,0 +1,12 @@
+Base de ATs - configuração
+
+1. Substitua o código do Apps Script pelo arquivo Code_ATs_WebApp.gs.
+2. Implante uma nova versão do Web App mantendo a mesma URL /exec.
+3. Recarregue a extensão SPX Toolkit no Chrome.
+
+A automação roda a cada 1 hora e consulta as ATs dos últimos 7 dias, incluindo hoje.
+Antes de enviar os dados completos, a extensão compara assinaturas compactas com a planilha.
+Somente ATs novas ou com algum campo alterado são enviadas e gravadas.
+O Apps Script faz uma segunda comparação antes da escrita para evitar regravações desnecessárias.
+A chave de atualização é assignment_task_id.
+A aba criada/atualizada no Sheets será Base_ATs.

@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SPX Toolkit</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <main class="app">
+    <section class="hero">
+      <div class="brandBlock">
+        <div class="brandLogo"><img src="icons/icon128.png" alt="SPX Toolkit"></div>
+        <div>
+          <div class="eyebrow">LM Hub_SC_Chapecó_Eldorado</div>
+          <h1>SPX Toolkit</h1>
+          <p>Rotina de apoio para operação logística, inventário, conferência, avarias e impressão de etiquetas.</p>
+        </div>
+      </div>
+      <div class="headerTools">
+        <button id="themeToggle" class="themeSwitch" type="button" aria-label="Alternar tema">
+          <span class="themeSwitchTrack"><span class="themeSwitchKnob"></span></span>
+          <span id="themeToggleText">Tema escuro</span>
+        </button>
+        <div class="statusCard">
+          <span id="siteDot" class="dot"></span>
+          <div class="siteInfo">
+            <strong id="siteStatus">Verificando operação...</strong>
+            <small id="siteUrl">Abra uma aba da SPX para iniciar</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="spxActions"><span class="tabIcon">⚙️</span><span>Operações</span></button>
+      <button class="tab" data-tab="functions"><span class="tabIcon">🔎</span><span>Consultas</span></button>
+      <button class="tab" data-tab="reports"><span class="tabIcon">📊</span><span>Relatórios</span></button>
+      <button class="tab" data-tab="autoTasks"><span class="tabIcon">⏱️</span><span>Auto Tarefas</span></button>
+      <button class="tab" data-tab="labels"><span class="tabIcon">🏷️</span><span>Etiquetas</span></button>
+    </nav>
+
+    <section id="spxActions" class="tabPage active">
+      <section class="grid">
+        <aside class="card controls">
+          <label>Ação</label>
+          <select id="spxActionType">
+            <option value="ADD_LAST_AT">Adicionar pedidos na última AT</option>
+            <option value="REMOVE_LAST_AT">Remover pedidos das AT's</option>
+          </select>
+          <label>Pedidos</label>
+          <textarea id="spxActionInput" spellcheck="false" placeholder="Cole os pedidos aqui"></textarea>
+          <div class="hint">Consulte e movimente pedidos conforme a rotina operacional da base.</div>
+          <div class="row">
+            <button id="runSpxAction" class="primary">Executar ação</button>
+            <button id="clearSpxAction" class="secondary">Limpar</button>
+          </div>
+          <div class="row">
+            <button id="copySpxAction" class="secondary">Copiar</button>
+            <button id="downloadSpxAction" class="secondary">Baixar CSV</button>
+          </div>
+          <div class="meta">
+            <div><span>Válidos</span><strong id="spxActionValidCount">0</strong></div>
+            <div><span>Processados</span><strong id="spxActionDoneCount">0</strong></div>
+            <div><span>Erros</span><strong id="spxActionErrCount">0</strong></div>
+          </div>
+        </aside>
+
+        <section class="card results">
+          <div class="resultTop">
+            <div>
+              <h2>Movimentação de pedidos</h2>
+              <p id="spxActionProgress">Aguardando execução.</p>
+            </div>
+            <div class="bar"><span id="spxActionBarFill"></span></div>
+          </div>
+          <div class="tableWrap">
+            <table>
+              <thead id="spxActionThead"><tr><th>Pedido</th><th>Última AT</th><th>Ação</th><th>Resultado</th></tr></thead>
+              <tbody id="spxActionTbody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </section>
+
+    <section id="functions" class="tabPage">
+      <section class="grid">
+        <aside class="card controls">
+          <label>Consulta</label>
+          <select id="action"></select>
+          <label>Pedidos</label>
+          <textarea id="brs" spellcheck="false" placeholder="Cole os pedidos aqui"></textarea>
+          <div class="row">
+            <button id="run" class="primary">Executar</button>
+            <button id="clear" class="secondary">Limpar</button>
+          </div>
+          <div class="row">
+            <button id="copy" class="secondary">Copiar</button>
+            <button id="download" class="secondary">Baixar CSV</button>
+          </div>
+          <div class="meta">
+            <div><span>Válidos</span><strong id="validCount">0</strong></div>
+            <div><span>Processados</span><strong id="doneCount">0</strong></div>
+            <div><span>Erros</span><strong id="errCount">0</strong></div>
+          </div>
+        </aside>
+
+        <section class="card results">
+          <div class="resultTop">
+            <div>
+              <h2>Resultado da consulta</h2>
+              <p id="progressText">Aguardando execução.</p>
+            </div>
+            <div class="bar"><span id="barFill"></span></div>
+          </div>
+          <div class="dualTables">
+            <div class="splitTable">
+              <h3>Entrada</h3>
+              <div class="tableWrap split">
+                <table>
+                  <thead id="inputThead"><tr><th>BR</th></tr></thead>
+                  <tbody id="inputTbody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="splitTable">
+              <h3>Saída</h3>
+              <div class="tableWrap split">
+                <table>
+                  <thead id="outputThead"><tr><th>Resultado</th></tr></thead>
+                  <tbody id="outputTbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </section>
+
+    <section id="reports" class="tabPage">
+      <section class="grid">
+        <aside class="card controls">
+          <label>Relatório</label>
+          <select id="reportType">
+            <option value="TOS">Lista de pacotes em TOs</option>
+            <option value="PARCEL">Relatório do Parcel PS</option>
+            <option value="RETURNS">Report de Returns</option>
+            <option value="CONFERENCIA">Conferência Missing &amp; Missort</option>
+          </select>
+          <label id="reportInputLabel">Entrada</label>
+          <textarea id="reportInput" spellcheck="false" placeholder="Cole os códigos do relatório"></textarea>
+          <div id="reportTaskPicker" class="taskPicker hidden">
+            <div class="taskPickerTop">
+              <strong id="reportTaskTitle">Tarefas recentes</strong>
+              <button id="refreshReportTasks" type="button" class="secondary mini">Atualizar</button>
+            </div>
+            <div id="reportTaskStatus" class="taskStatus">Selecione um relatório para carregar tarefas.</div>
+            <div id="reportTaskList" class="taskList"></div>
+          </div>
+          <div class="row">
+            <button id="runReport" class="primary">Gerar relatório</button>
+            <button id="clearReport" class="secondary">Limpar</button>
+          </div>
+          <div class="row">
+            <button id="copyReport" class="secondary">Copiar</button>
+            <button id="downloadReport" class="secondary">Baixar CSV</button>
+          </div>
+          <button id="sendSheets" class="secondary full">Enviar para base operacional</button>
+          <div class="hint" id="reportHint"></div>
+        </aside>
+
+        <section class="card results">
+          <div class="resultTop">
+            <div>
+              <h2 id="reportTitle">Relatório</h2>
+              <p id="reportProgress">Aguardando execução.</p>
+              <div id="reportLinkBox" class="reportLinkBox"></div>
+            </div>
+            <div class="bar"><span id="reportBarFill"></span></div>
+          </div>
+          <div class="tableWrap">
+            <table>
+              <thead id="reportThead"></thead>
+              <tbody id="reportTbody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </section>
+
+
+
+    <section id="autoTasks" class="tabPage">
+      <div class="autoTaskStack">
+        <section class="autoTaskPanel">
+          <div class="autoTaskHeader">
+            <div>
+              <h2>Avarias</h2>
+              <p>Atualização automática de item/produto e status SPX.</p>
+            </div>
+            <span class="autoTaskPill">A cada 10 minutos</span>
+          </div>
+          <section class="autoTaskGrid">
+            <aside class="card controls">
+              <label>Atualização automática</label>
+              <div class="hint">Busca na planilha os SPX TN pendentes, consulta nome do item e status na SPX usando a aba logada, depois grava de volta na planilha.</div>
+              <label class="checkLine">
+                <input type="checkbox" id="avariasAutoEnabled" checked>
+                Rodar automaticamente a cada 10 minutos
+              </label>
+              <div id="avariasAutoStatus" class="autoStatus">Auto ativo • próxima execução em 10:00</div>
+              <div class="row">
+                <button id="runAvarias" class="primary">Buscar e preencher</button>
+                <button id="clearAvarias" class="secondary">Limpar</button>
+              </div>
+              <div class="row">
+                <button id="copyAvarias" class="secondary">Copiar</button>
+                <button id="downloadAvarias" class="secondary">Baixar CSV</button>
+              </div>
+              <div class="meta">
+                <div><span>Pendentes</span><strong id="avariasTotal">0</strong></div>
+                <div><span>Atualizados</span><strong id="avariasUpdated">0</strong></div>
+                <div><span>Erros</span><strong id="avariasErrors">0</strong></div>
+              </div>
+            </aside>
+
+            <section class="card results">
+              <div class="resultTop">
+                <div>
+                  <h2>Preencher Avarias</h2>
+                  <p id="avariasProgress">Aguardando execução.</p>
+                </div>
+                <div class="bar"><span id="avariasBarFill"></span></div>
+              </div>
+              <div class="tableWrap autoTaskTable">
+                <table>
+                  <thead id="avariasThead"></thead>
+                  <tbody id="avariasTbody"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <section class="autoTaskPanel">
+          <div class="autoTaskHeader">
+            <div>
+              <h2>Conferência Auto</h2>
+              <p>Sincroniza tarefas de conferência para acompanhamento operacional.</p>
+            </div>
+            <span class="autoTaskPill">A cada 10 minutos</span>
+          </div>
+          <section class="autoTaskGrid">
+            <aside class="card controls">
+              <label>Atualização automática</label>
+              <div class="hint">Coleta tarefas de conferência e seus alvos para manter a base operacional atualizada. Janela padrão: últimos 7 dias.</div>
+              <label class="checkLine">
+                <input type="checkbox" id="auditAutoEnabled" checked>
+                Rodar automaticamente a cada 10 minutos
+              </label>
+              <div id="auditAutoStatus" class="autoStatus">Auto ativo • próxima execução em 10:00</div>
+              <div class="row">
+                <button id="runAuditAuto" class="primary">Coletar e enviar</button>
+                <button id="clearAuditAuto" class="secondary">Limpar</button>
+              </div>
+              <div class="row">
+                <button id="copyAuditAuto" class="secondary">Copiar</button>
+                <button id="downloadAuditAuto" class="secondary">Baixar CSV</button>
+              </div>
+              <div class="meta">
+                <div><span>Tarefas</span><strong id="auditAutoTasks">0</strong></div>
+                <div><span>Targets</span><strong id="auditAutoTargets">0</strong></div>
+                <div><span>Erros</span><strong id="auditAutoErrors">0</strong></div>
+              </div>
+            </aside>
+
+            <section class="card results">
+              <div class="resultTop">
+                <div>
+                  <h2>Sync Conferência</h2>
+                  <p id="auditAutoProgress">Aguardando execução.</p>
+                </div>
+                <div class="bar"><span id="auditAutoBarFill"></span></div>
+              </div>
+              <div class="tableWrap autoTaskTable">
+                <table>
+                  <thead id="auditAutoThead"></thead>
+                  <tbody id="auditAutoTbody"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <section class="autoTaskPanel">
+          <div class="autoTaskHeader">
+            <div>
+              <h2>Base de ATs</h2>
+              <p>Sincroniza as ATs dos últimos 7 dias para a planilha operacional.</p>
+            </div>
+            <span class="autoTaskPill">A cada 1 hora</span>
+          </div>
+          <section class="autoTaskGrid">
+            <aside class="card controls">
+              <label>Atualização automática</label>
+              <div class="hint">Coleta as ATs na SPX, compara com a planilha e envia somente registros novos ou alterados.</div>
+              <label class="checkLine">
+                <input type="checkbox" id="assignmentAutoEnabled" checked>
+                Rodar automaticamente a cada 1 hora
+              </label>
+              <div id="assignmentAutoStatus" class="autoStatus">Auto ativo • próxima execução em 01:00:00</div>
+              <div class="row">
+                <button id="runAssignmentAuto" class="primary">Coletar e enviar</button>
+                <button id="clearAssignmentAuto" class="secondary">Limpar</button>
+              </div>
+              <div class="row">
+                <button id="copyAssignmentAuto" class="secondary">Copiar</button>
+                <button id="downloadAssignmentAuto" class="secondary">Baixar CSV</button>
+              </div>
+              <div class="meta">
+                <div><span>ATs</span><strong id="assignmentAutoTasks">0</strong></div>
+                <div><span>Alterações</span><strong id="assignmentAutoSent">0</strong></div>
+                <div><span>Erros</span><strong id="assignmentAutoErrors">0</strong></div>
+              </div>
+            </aside>
+
+            <section class="card results">
+              <div class="resultTop">
+                <div>
+                  <h2>Sync Base de ATs</h2>
+                  <p id="assignmentAutoProgress">Aguardando execução.</p>
+                </div>
+                <div class="bar"><span id="assignmentAutoBarFill"></span></div>
+              </div>
+              <div class="tableWrap autoTaskTable">
+                <table>
+                  <thead id="assignmentAutoThead"></thead>
+                  <tbody id="assignmentAutoTbody"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <section class="autoTaskPanel">
+          <div class="autoTaskHeader">
+            <div>
+              <h2>Devoluções Pendentes</h2>
+              <p>Exporta a lista atual de pedidos pendentes de recebimento e substitui a base na planilha.</p>
+            </div>
+            <span class="autoTaskPill">A cada 1 hora</span>
+          </div>
+          <section class="autoTaskGrid">
+            <aside class="card controls">
+              <label>Atualização automática</label>
+              <div class="hint">Solicita a exportação na SPX, aguarda o arquivo ficar disponível, baixa o CSV e substitui integralmente a aba Devoluções Pendentes.</div>
+              <label class="checkLine">
+                <input type="checkbox" id="pendingReturnsAutoEnabled" checked>
+                Rodar automaticamente a cada 1 hora
+              </label>
+              <div id="pendingReturnsStatus" class="autoStatus">Auto ativo • próxima execução em 01:00:00</div>
+              <div class="row">
+                <button id="runPendingReturns" class="primary">Exportar e enviar</button>
+                <button id="clearPendingReturns" class="secondary">Limpar</button>
+              </div>
+              <div class="row">
+                <button id="copyPendingReturns" class="secondary">Copiar</button>
+                <button id="downloadPendingReturns" class="secondary">Baixar CSV</button>
+              </div>
+              <div class="meta">
+                <div><span>Pedidos</span><strong id="pendingReturnsOrders">0</strong></div>
+                <div><span>Task ID</span><strong id="pendingReturnsTaskId">-</strong></div>
+                <div><span>Erros</span><strong id="pendingReturnsErrors">0</strong></div>
+              </div>
+            </aside>
+
+            <section class="card results">
+              <div class="resultTop">
+                <div>
+                  <h2>Sync Devoluções Pendentes</h2>
+                  <p id="pendingReturnsProgress">Aguardando execução.</p>
+                </div>
+                <div class="bar"><span id="pendingReturnsBarFill"></span></div>
+              </div>
+              <div class="tableWrap autoTaskTable">
+                <table>
+                  <thead id="pendingReturnsThead"></thead>
+                  <tbody id="pendingReturnsTbody"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+        </section>
+      </div>
+    </section>
+
+    <section id="labels" class="tabPage">
+      <section class="card results labelsPageCard">
+        <div class="resultTop labelsTop">
+          <div>
+            <h2>Catálogo de Etiquetas</h2>
+            <p id="labelProgress">Selecione uma etiqueta cadastrada para imprimir.</p>
+          </div>
+          <div class="labelTopActions">
+            <button id="reloadLabels" class="secondary">Atualizar catálogo</button>
+            <div class="bar"><span id="labelBarFill"></span></div>
+          </div>
+        </div>
+        <div id="labelStatus" class="autoStatus labelStatus">Carregando catálogo de etiquetas...</div>
+        <div id="labelList" class="labelList"></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="labelPrintModal" class="labelModalOverlay" aria-hidden="true">
+    <div class="labelModal" role="dialog" aria-modal="true" aria-labelledby="labelModalTitle">
+      <button id="labelModalClose" class="labelModalClose" type="button" aria-label="Fechar">×</button>
+      <div class="labelModalBrand">
+        <div class="labelModalLogo"><img src="icons/icon128.png" alt="SPX Toolkit"></div>
+        <div>
+          <span>Impressão operacional</span>
+          <strong>Etiquetas de apoio</strong>
+        </div>
+      </div>
+
+      <div class="labelModalHero">
+        <div class="labelModalPreview">
+          <img id="labelModalImage" alt="Prévia da etiqueta">
+        </div>
+        <div class="labelModalIntro">
+          <h2 id="labelModalTitle">Imprimir etiqueta</h2>
+          <p id="labelModalSubtitle">Selecione o formato da etiqueta e a quantidade.</p>
+          <div class="labelModalBadges">
+            <span>Rotação automática</span>
+            <span>Envio direto para impressora</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="labelModalSection">
+        <div class="labelModalSectionTitle">Tipo de etiqueta</div>
+        <div class="labelTypeGrid">
+          <button id="labelTypeSmall" class="labelTypeOption selected" type="button" data-type="small">
+            <span class="labelTypeIcon">▭</span>
+            <strong>Pequena</strong>
+            <span>70mm × 40mm</span>
+          </button>
+          <button id="labelTypeLarge" class="labelTypeOption" type="button" data-type="large">
+            <span class="labelTypeIcon">▯</span>
+            <strong>Grande</strong>
+            <span>100mm × 150mm</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="labelQtyBox">
+        <span>Quantidade</span>
+        <div class="labelQtyControls">
+          <button id="labelQtyMinus" type="button">−</button>
+          <input id="labelQtyInput" type="number" min="1" max="999" step="1" value="1">
+          <button id="labelQtyPlus" type="button">+</button>
+        </div>
+      </div>
+
+      <div class="labelModalActions">
+        <button id="labelModalCancel" class="secondary" type="button">Cancelar</button>
+        <button id="labelModalPrint" class="primary" type="button">Imprimir etiqueta</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="panel.js"></script>
+</body>
+</html>

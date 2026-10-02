@@ -1,0 +1,12 @@
+Devoluções Pendentes - configuração
+
+A automação roda a cada 1 hora e exige uma aba da SPX aberta e autenticada.
+
+Fluxo:
+1. Solicita a exportação de pedidos Pending Receive dos últimos 30 dias.
+2. Aguarda o task_id aparecer como concluído na lista de exportações.
+3. Baixa o CSV gerado.
+4. Envia o arquivo ao mesmo Web App usado pela Conferência Auto.
+5. Substitui integralmente a aba "Devoluções Pendentes".
+
+Atualize o Code.gs do Web App da Conferência pelo arquivo entregue junto com esta versão e publique uma nova versão mantendo a mesma URL /exec.
