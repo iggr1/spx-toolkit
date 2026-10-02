@@ -122,7 +122,8 @@ h1 { margin: 0; font-size: clamp(30px, 3vw, 46px); line-height: 1; letter-spacin
 :root[data-theme="light"] .tab:hover { border-color: rgba(15,23,42,.22); }
 .tabCounterGroup { display: none !important; }
 
-.tabIcon { font-size: 16px; }
+.tabIcon { font-size: 16px; display: inline-grid; place-items: center; width: 18px; height: 18px; flex: 0 0 18px; }
+.tabIcon img { width: 18px; height: 18px; object-fit: contain; display: block; }
 .tabCounterGroup { display: inline-flex; gap: 5px; margin-left: 4px; }
 .tabCounter { font-size: 10px; padding: 4px 7px; border-radius: 999px; background: rgba(255,255,255,.12); color: inherit; }
 
