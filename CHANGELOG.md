@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.36
+- Remove o fundo do ícone enviado pelo usuário e gera os PNGs com transparência.
+
 ## 1.5.35
 - Substitui os ícones da extensão pelo ícone enviado pelo usuário em 16, 48, 128 e 1024 px.
 
