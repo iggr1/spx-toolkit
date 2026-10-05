@@ -346,6 +346,56 @@
         <section class="autoTaskPanel">
           <div class="autoTaskHeader">
             <div>
+              <h2>Relatório Parcel Sweeper</h2>
+              <p>Sincroniza as tarefas mais recentes do Parcel Sweeper e seus pedidos para a planilha.</p>
+            </div>
+            <span class="autoTaskPill">A cada 1 hora</span>
+          </div>
+          <section class="autoTaskGrid">
+            <aside class="card controls">
+              <label>Atualização automática</label>
+              <div class="hint">Consulta somente as 5 tarefas mais recentes. Tarefas em status 4 têm todas as páginas de pedidos coletadas. Tarefas em status 5 só são coletadas novamente quando ainda não estiverem marcadas como completas na planilha.</div>
+              <label class="checkLine">
+                <input type="checkbox" id="parcelSweeperAutoEnabled" checked>
+                Rodar automaticamente a cada 1 hora
+              </label>
+              <div id="parcelSweeperStatus" class="autoStatus">Auto ativo • próxima execução em 01:00:00</div>
+              <div class="row">
+                <button id="runParcelSweeper" class="primary">Coletar e enviar</button>
+                <button id="clearParcelSweeper" class="secondary">Limpar</button>
+              </div>
+              <div class="row">
+                <button id="copyParcelSweeper" class="secondary">Copiar</button>
+                <button id="downloadParcelSweeper" class="secondary">Baixar CSV</button>
+              </div>
+              <div class="meta">
+                <div><span>Tarefas</span><strong id="parcelSweeperTasks">0</strong></div>
+                <div><span>Pedidos</span><strong id="parcelSweeperOrders">0</strong></div>
+                <div><span>Erros</span><strong id="parcelSweeperErrors">0</strong></div>
+              </div>
+            </aside>
+
+            <section class="card results">
+              <div class="resultTop">
+                <div>
+                  <h2>Sync Parcel Sweeper</h2>
+                  <p id="parcelSweeperProgress">Aguardando execução.</p>
+                </div>
+                <div class="bar"><span id="parcelSweeperBarFill"></span></div>
+              </div>
+              <div class="tableWrap autoTaskTable">
+                <table>
+                  <thead id="parcelSweeperThead"></thead>
+                  <tbody id="parcelSweeperTbody"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <section class="autoTaskPanel">
+          <div class="autoTaskHeader">
+            <div>
               <h2>Devoluções Pendentes</h2>
               <p>Exporta a lista atual de pedidos pendentes de recebimento e substitui a base na planilha.</p>
             </div>

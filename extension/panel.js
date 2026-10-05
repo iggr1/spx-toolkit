@@ -2344,6 +2344,160 @@ resetAssignmentAutoUi();
 startAssignmentAutoCounter();
 
 
+const PARCEL_SWEEPER_INTERVAL_MS = 60 * 60 * 1000;
+let parcelSweeperTimer = null;
+let lastParcelSweeperState = null;
+let lastParcelSweeperHeaders = ['Data', 'Tarefa PS', 'Status', 'Planilha', 'Pedidos', 'Resultado'];
+let lastParcelSweeperRows = [];
+
+function setParcelSweeperProgress(done, total, text) {
+  const safeTotal = Math.max(Number(total) || 0, Number(done) || 0);
+  const pct = safeTotal ? Math.round((done * 100) / safeTotal) : 0;
+  const bar = $('parcelSweeperBarFill');
+
+  if (bar) bar.style.width = pct + '%';
+  if ($('parcelSweeperProgress')) {
+    $('parcelSweeperProgress').textContent = text || (safeTotal ? `${done}/${safeTotal} tarefa(s)` : 'Aguardando execução.');
+  }
+}
+
+function resetParcelSweeperUi() {
+  lastParcelSweeperRows = [];
+  renderTable('parcelSweeperThead', 'parcelSweeperTbody', lastParcelSweeperHeaders, []);
+  if ($('parcelSweeperTasks')) $('parcelSweeperTasks').textContent = '0';
+  if ($('parcelSweeperOrders')) $('parcelSweeperOrders').textContent = '0';
+  if ($('parcelSweeperErrors')) $('parcelSweeperErrors').textContent = '0';
+  setParcelSweeperProgress(0, 0, 'Aguardando execução.');
+}
+
+function renderParcelSweeperState(state) {
+  lastParcelSweeperState = state || lastParcelSweeperState || {};
+  const enabled = lastParcelSweeperState.enabled !== false;
+  const runningAuto = !!lastParcelSweeperState.running;
+  const nextRunAt = Number(lastParcelSweeperState.nextRunAt || 0);
+  const left = nextRunAt ? nextRunAt - Date.now() : PARCEL_SWEEPER_INTERVAL_MS;
+
+  lastParcelSweeperHeaders = Array.isArray(lastParcelSweeperState.lastHeaders) && lastParcelSweeperState.lastHeaders.length
+    ? lastParcelSweeperState.lastHeaders
+    : lastParcelSweeperHeaders;
+  lastParcelSweeperRows = Array.isArray(lastParcelSweeperState.lastRows)
+    ? lastParcelSweeperState.lastRows
+    : lastParcelSweeperRows;
+
+  if ($('parcelSweeperAutoEnabled')) $('parcelSweeperAutoEnabled').checked = enabled;
+  if ($('parcelSweeperTasks')) $('parcelSweeperTasks').textContent = String(lastParcelSweeperState.lastTasks || 0);
+  if ($('parcelSweeperOrders')) $('parcelSweeperOrders').textContent = String(lastParcelSweeperState.lastOrders || 0);
+  if ($('parcelSweeperErrors')) $('parcelSweeperErrors').textContent = String(lastParcelSweeperState.lastErrors || 0);
+
+  if ($('parcelSweeperStatus')) {
+    const base = runningAuto
+      ? 'Auto rodando agora...'
+      : enabled
+        ? `Auto ativo • próxima execução em ${formatAvariasCountdown(left)}`
+        : 'Auto desativado';
+    const last = lastParcelSweeperState.lastStatus ? ` • ${lastParcelSweeperState.lastStatus}` : '';
+    $('parcelSweeperStatus').textContent = base + last;
+  }
+
+  renderTable('parcelSweeperThead', 'parcelSweeperTbody', lastParcelSweeperHeaders, lastParcelSweeperRows);
+  setParcelSweeperProgress(
+    Number(lastParcelSweeperState.lastTasks || 0),
+    Math.max(5, Number(lastParcelSweeperState.lastTasks || 0)),
+    runningAuto
+      ? 'Consultando Parcel Sweeper e sincronizando a planilha...'
+      : (lastParcelSweeperState.lastStatus || 'Aguardando execução.')
+  );
+}
+
+async function refreshParcelSweeperState() {
+  try {
+    const state = await runtimeMessage({ type: 'PARCEL_SWEEPER_STATUS' });
+    renderParcelSweeperState(state);
+  } catch (e) {
+    if ($('parcelSweeperStatus')) $('parcelSweeperStatus').textContent = 'Erro no auto: ' + e.message;
+  }
+}
+
+function startParcelSweeperCounter() {
+  if (parcelSweeperTimer) clearInterval(parcelSweeperTimer);
+  parcelSweeperTimer = setInterval(() => {
+    if (lastParcelSweeperState) renderParcelSweeperState(lastParcelSweeperState);
+    refreshParcelSweeperState();
+  }, 1000);
+  refreshParcelSweeperState();
+}
+
+if ($('parcelSweeperAutoEnabled')) {
+  $('parcelSweeperAutoEnabled').addEventListener('change', async () => {
+    try {
+      const enabled = $('parcelSweeperAutoEnabled').checked;
+      const state = await runtimeMessage({ type: 'PARCEL_SWEEPER_SET_ENABLED', enabled });
+      renderParcelSweeperState(state);
+      toast(enabled ? 'Automação do Parcel Sweeper ativada.' : 'Automação do Parcel Sweeper desativada.');
+    } catch (e) {
+      toast(e.message);
+      refreshParcelSweeperState();
+    }
+  });
+}
+
+if ($('runParcelSweeper')) {
+  $('runParcelSweeper').addEventListener('click', async () => {
+    try {
+      $('runParcelSweeper').disabled = true;
+      setParcelSweeperProgress(0, 5, 'Consultando as 5 tarefas mais recentes...');
+      const result = await runtimeMessage({ type: 'PARCEL_SWEEPER_RUN_NOW' });
+      await refreshParcelSweeperState();
+
+      if (result && result.skipped) {
+        toast(result.reason || 'Execução ignorada.');
+      } else if (result && result.ok === false) {
+        toast(result.error || `Parcel Sweeper concluído com ${result.errors || 1} erro(s).`);
+      } else {
+        toast(`Parcel Sweeper atualizado • ${result?.orderCount || 0} pedido(s) coletados.`);
+      }
+    } catch (e) {
+      toast(e.message);
+      refreshParcelSweeperState();
+    } finally {
+      setTimeout(() => {
+        if ($('runParcelSweeper')) $('runParcelSweeper').disabled = false;
+      }, 1200);
+    }
+  });
+}
+
+if ($('clearParcelSweeper')) {
+  $('clearParcelSweeper').addEventListener('click', async () => {
+    try {
+      const state = await runtimeMessage({ type: 'PARCEL_SWEEPER_CLEAR_RESULTS' });
+      renderParcelSweeperState(state);
+    } catch (e) {
+      toast(e.message);
+    }
+  });
+}
+
+if ($('copyParcelSweeper')) {
+  $('copyParcelSweeper').addEventListener('click', () => {
+    lastParcelSweeperRows.length
+      ? copyRows(lastParcelSweeperHeaders, lastParcelSweeperRows)
+      : toast('Sem resultado.');
+  });
+}
+
+if ($('downloadParcelSweeper')) {
+  $('downloadParcelSweeper').addEventListener('click', () => {
+    lastParcelSweeperRows.length
+      ? downloadCsv('spx_parcel_sweeper_resumo.csv', lastParcelSweeperHeaders, lastParcelSweeperRows)
+      : toast('Sem resultado.');
+  });
+}
+
+resetParcelSweeperUi();
+startParcelSweeperCounter();
+
+
 const PENDING_RETURNS_INTERVAL_MS = 60 * 60 * 1000;
 let pendingReturnsTimer = null;
 let lastPendingReturnsState = null;

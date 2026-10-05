@@ -5,7 +5,8 @@ const ALLOWED_SHEETS = new Set([
   "OrderRefresh",
   "PendingReturns",
   "Devoluções Pendentes",
-  "Devolucoes_Pendentes"
+  "Devolucoes_Pendentes",
+  "Relatório Parcel Sweeper"
 ]);
 
 const CONFIG = {
@@ -48,7 +49,12 @@ const DATETIME_FIELDS = new Set([
   "Reschedule Date",
   "Reschedule Time",
   "SLA Target Date",
-  "imported_at"
+  "imported_at",
+  "Data",
+  "Início Tarefa",
+  "Fim Tarefa",
+  "Scanned Time",
+  "Atualizado Em"
 ]);
 
 const FORCE_TEXT_FIELDS = new Set([
@@ -73,7 +79,13 @@ const FORCE_TEXT_FIELDS = new Set([
   "Shop ID",
   "3PL TN",
   "Return Destination",
-  "export_task_id"
+  "export_task_id",
+  "Tarefa PS",
+  "BR",
+  "Sort Code",
+  "Operador Tarefa",
+  "Operador Conclusão",
+  "Operador Pedido"
 ]);
 
 const CONFERENCIA_DERIVED_FIELDS = [
@@ -107,6 +119,9 @@ const PENDING_RETURNS_META_FIELDS = [
 function doPost(e) {
   try {
     const payload = parsePostPayload_(e);
+    const parcelSweeperResult = handleParcelSweeperAction_(payload);
+    if (parcelSweeperResult) return jsonOutput_(parcelSweeperResult);
+
     const items = Array.isArray(payload.items) ? payload.items : [payload];
 
     if (!items.length) {
@@ -449,6 +464,349 @@ function normalizeCompareValue_(v) {
   if (typeof v === "number") return String(v);
   return String(v).trim();
 }
+
+const PARCEL_SWEEPER_SHEET = "Relatório Parcel Sweeper";
+const PARCEL_SWEEPER_CONTROL_SHEET = "_Parcel Sweeper Controle";
+const PARCEL_SWEEPER_HEADERS = [
+  "Data",
+  "Tarefa PS",
+  "Task Type",
+  "Status Tarefa",
+  "Tarefa Completa",
+  "Expected",
+  "Total",
+  "Scanned",
+  "Exception",
+  "Liquidate",
+  "Backlog",
+  "Misplaced",
+  "Processed",
+  "Missing",
+  "Unscanned",
+  "Can View Action",
+  "Need Alert Scan Time",
+  "Disposal",
+  "Expected Scanned",
+  "Expected Scanned Rate",
+  "Expected Scanned Rate Str",
+  "Unscanned Order Count",
+  "Início Tarefa",
+  "Fim Tarefa",
+  "Operador Tarefa",
+  "Operador Conclusão",
+  "BR",
+  "Order Status",
+  "Sort Code",
+  "Próxima Ação",
+  "On Hold Times",
+  "Count Type",
+  "Inventory",
+  "Operador Pedido",
+  "Holding Time",
+  "Scanned Time",
+  "Scanned Order Status",
+  "Final Order Status",
+  "Next Step Action Int",
+  "Expedite Tag",
+  "Atualizado Em"
+];
+const PARCEL_SWEEPER_CONTROL_HEADERS = [
+  "Tarefa PS",
+  "Data",
+  "Status Tarefa",
+  "Completa",
+  "Pedidos Importados",
+  "Total Tarefa",
+  "Atualizado Em"
+];
+
+function handleParcelSweeperAction_(payload) {
+  const action = String(payload && payload.action || "").trim();
+
+  if (action === "parcelSweeperStatus") {
+    return {
+      ok: true,
+      tasks: getParcelSweeperTaskStatus_(payload && payload.taskIds)
+    };
+  }
+
+  if (action === "parcelSweeperImport") {
+    return importParcelSweeperTask_(payload || {});
+  }
+
+  return null;
+}
+
+function getParcelSweeperTaskStatus_(taskIds) {
+  const ids = Array.isArray(taskIds)
+    ? taskIds.map(v => String(v || "").trim()).filter(Boolean)
+    : [];
+  const wanted = new Set(ids);
+  const out = {};
+
+  ids.forEach(id => {
+    out[id] = {
+      complete: false,
+      orderCount: 0,
+      taskTotal: 0,
+      status: 0,
+      updatedAt: ""
+    };
+  });
+
+  if (!ids.length) return out;
+
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sh = ss.getSheetByName(PARCEL_SWEEPER_CONTROL_SHEET);
+  if (!sh || sh.getLastRow() < 2) return out;
+
+  const values = sh.getDataRange().getValues();
+  const header = values[0].map(String);
+  const idxTask = header.indexOf("Tarefa PS");
+  const idxDate = header.indexOf("Data");
+  const idxStatus = header.indexOf("Status Tarefa");
+  const idxComplete = header.indexOf("Completa");
+  const idxCount = header.indexOf("Pedidos Importados");
+  const idxTotal = header.indexOf("Total Tarefa");
+  const idxUpdated = header.indexOf("Atualizado Em");
+
+  if (idxTask === -1) return out;
+
+  for (let i = 1; i < values.length; i++) {
+    const taskId = String(values[i][idxTask] || "").trim();
+    if (!wanted.has(taskId)) continue;
+
+    const rawComplete = idxComplete === -1 ? false : values[i][idxComplete];
+    const complete = rawComplete === true || String(rawComplete).toLowerCase() === "true";
+    const orderCount = idxCount === -1 ? 0 : Number(values[i][idxCount] || 0);
+    const taskTotal = idxTotal === -1 ? 0 : Number(values[i][idxTotal] || 0);
+
+    out[taskId] = {
+      complete: !!complete && (taskTotal <= 0 || orderCount >= taskTotal),
+      orderCount,
+      taskTotal,
+      status: idxStatus === -1 ? 0 : Number(values[i][idxStatus] || 0),
+      date: idxDate === -1 ? "" : values[i][idxDate],
+      updatedAt: idxUpdated === -1 ? "" : values[i][idxUpdated]
+    };
+  }
+
+  return out;
+}
+
+function importParcelSweeperTask_(payload) {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const task = payload && payload.task ? payload.task : {};
+  const taskId = String(task.task_id || "").trim();
+  const orders = Array.isArray(payload && payload.orders) ? payload.orders : [];
+
+  if (!taskId) throw new Error("Parcel Sweeper: task_id vazio.");
+
+  const expectedTotal = Math.max(0, Number(task.total || 0));
+  const requestedComplete = payload && payload.complete === true;
+  const complete = requestedComplete && (expectedTotal <= 0 || orders.length >= expectedTotal);
+  const sh = getOrCreateSheet_(ss, PARCEL_SWEEPER_SHEET);
+
+  let header = PARCEL_SWEEPER_HEADERS.slice();
+  const existingLastRow = sh.getLastRow();
+  const existingLastCol = sh.getLastColumn();
+
+  if (existingLastRow === 0) {
+    sh.getRange(1, 1, 1, header.length).setValues([header]);
+    sh.setFrozenRows(1);
+  } else {
+    const existingHeader = sh.getRange(1, 1, 1, existingLastCol).getValues()[0].map(String);
+    header = mergeHeaders_(existingHeader, header);
+    if (header.length !== existingHeader.length) {
+      sh.getRange(1, 1, 1, header.length).setValues([header]);
+    }
+  }
+
+  const now = new Date();
+  const incomingObjects = [];
+  const seen = new Set();
+
+  for (let i = 0; i < orders.length; i++) {
+    const order = orders[i] || {};
+    const shipmentId = String(order.shipment_id || "").trim();
+    if (!shipmentId || seen.has(shipmentId)) continue;
+    seen.add(shipmentId);
+
+    incomingObjects.push({
+      "Data": task.date || "",
+      "Tarefa PS": taskId,
+      "Task Type": Number(task.task_type || 0),
+      "Status Tarefa": Number(task.status || 0),
+      "Tarefa Completa": complete,
+      "Expected": Number(task.expected || 0),
+      "Total": expectedTotal,
+      "Scanned": Number(task.scanned || 0),
+      "Exception": Number(task.exception || 0),
+      "Liquidate": Number(task.liquidate || 0),
+      "Backlog": Number(task.backlog || 0),
+      "Misplaced": Number(task.misplaced || 0),
+      "Processed": Number(task.processed || 0),
+      "Missing": Number(task.missing || 0),
+      "Unscanned": Number(task.unscanned || 0),
+      "Can View Action": task.can_view_action === true,
+      "Need Alert Scan Time": task.need_alert_scan_time === true,
+      "Disposal": Number(task.disposal || 0),
+      "Expected Scanned": Number(task.expected_scanned || 0),
+      "Expected Scanned Rate": Number(task.expected_scanned_rate || 0),
+      "Expected Scanned Rate Str": task.expected_scanned_rate_str || "",
+      "Unscanned Order Count": JSON.stringify(task.unscanned_order_count || {}),
+      "Início Tarefa": Number(task.start_time || 0),
+      "Fim Tarefa": Number(task.end_time || 0),
+      "Operador Tarefa": task.operator || "",
+      "Operador Conclusão": task.complete_operator || "",
+      "BR": shipmentId,
+      "Order Status": Number(order.order_status ?? 0),
+      "Sort Code": order.sort_code || "",
+      "Próxima Ação": order.next_step_action || "",
+      "On Hold Times": Number(order.onhold_times ?? 0),
+      "Count Type": Number(order.count_type ?? 0),
+      "Inventory": Number(order.inventory ?? 0),
+      "Operador Pedido": order.operator || "",
+      "Holding Time": order.holding_time_str || "",
+      "Scanned Time": Number(order.scanned_time || 0),
+      "Scanned Order Status": Number(order.scanned_order_status ?? 0),
+      "Final Order Status": Number(order.final_order_status ?? 0),
+      "Next Step Action Int": Number(order.next_step_action_int ?? 0),
+      "Expedite Tag": Number(order.expedite_tag ?? 0),
+      "Atualizado Em": now
+    });
+  }
+
+  const taskCol = header.indexOf("Tarefa PS") + 1;
+  const shipmentCol = header.indexOf("BR") + 1;
+  if (!taskCol || !shipmentCol) throw new Error("Parcel Sweeper: cabeçalho inválido.");
+
+  const existingRows = Math.max(0, sh.getLastRow() - 1);
+  const index = new Map();
+
+  if (existingRows > 0) {
+    const taskValues = sh.getRange(2, taskCol, existingRows, 1).getValues();
+    const shipmentValues = sh.getRange(2, shipmentCol, existingRows, 1).getValues();
+
+    for (let i = 0; i < existingRows; i++) {
+      const currentTask = String(taskValues[i][0] || "").trim();
+      const currentShipment = String(shipmentValues[i][0] || "").trim();
+      if (!currentTask || !currentShipment) continue;
+      index.set(currentTask + "|" + currentShipment, i + 2);
+    }
+  }
+
+  const updatesByRow = new Map();
+  const inserts = [];
+
+  for (let i = 0; i < incomingObjects.length; i++) {
+    const obj = incomingObjects[i];
+    const row = objectToRowArray_(header, obj);
+    const key = String(obj["Tarefa PS"] || "") + "|" + String(obj.BR || "");
+    const rowNumber = index.get(key);
+
+    coerceDatesInMatrix_(header, [row]);
+    forceTextInMatrix_(header, [row]);
+
+    if (rowNumber) updatesByRow.set(rowNumber, row);
+    else inserts.push(row);
+  }
+
+  applyUpdatesChunked_(sh, header.length, updatesByRow);
+  appendChunked_(sh, header.length, inserts, CONFIG.WRITE_CHUNK);
+
+  if (complete && sh.getLastRow() > 1) {
+    const rows = sh.getLastRow() - 1;
+    const taskValues = sh.getRange(2, taskCol, rows, 1).getValues();
+    const statusCol = header.indexOf("Status Tarefa") + 1;
+    const completeCol = header.indexOf("Tarefa Completa") + 1;
+    const statusValues = sh.getRange(2, statusCol, rows, 1).getValues();
+    const completeValues = sh.getRange(2, completeCol, rows, 1).getValues();
+    let changed = false;
+
+    for (let i = 0; i < rows; i++) {
+      if (String(taskValues[i][0] || "").trim() !== taskId) continue;
+      statusValues[i][0] = Number(task.status || 5);
+      completeValues[i][0] = true;
+      changed = true;
+    }
+
+    if (changed) {
+      sh.getRange(2, statusCol, rows, 1).setValues(statusValues);
+      sh.getRange(2, completeCol, rows, 1).setValues(completeValues);
+    }
+  }
+
+  sh.setFrozenRows(1);
+  applyTextFormats_(sh, header);
+  applyDateFormats_(sh, getDateColsFromHeader_(header).dateTimeCols);
+  const dataCol = header.indexOf("Data") + 1;
+  if (dataCol > 0 && sh.getLastRow() > 1) {
+    sh.getRange(2, dataCol, sh.getLastRow() - 1, 1).setNumberFormat("dd/MM/yyyy");
+  }
+
+  updateParcelSweeperControl_(ss, task, complete, incomingObjects.length, expectedTotal, now);
+
+  return {
+    ok: true,
+    sheetName: PARCEL_SWEEPER_SHEET,
+    taskId,
+    status: Number(task.status || 0),
+    complete,
+    requestedComplete,
+    orderCount: incomingObjects.length,
+    taskTotal: expectedTotal,
+    inserted: inserts.length,
+    updated: updatesByRow.size
+  };
+}
+
+function updateParcelSweeperControl_(ss, task, complete, orderCount, taskTotal, updatedAt) {
+  const sh = getOrCreateSheet_(ss, PARCEL_SWEEPER_CONTROL_SHEET);
+
+  if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, PARCEL_SWEEPER_CONTROL_HEADERS.length)
+      .setValues([PARCEL_SWEEPER_CONTROL_HEADERS]);
+    sh.setFrozenRows(1);
+  }
+
+  const taskId = String(task.task_id || "").trim();
+  const rows = Math.max(0, sh.getLastRow() - 1);
+  let targetRow = 0;
+
+  if (rows > 0) {
+    const taskValues = sh.getRange(2, 1, rows, 1).getValues();
+    for (let i = 0; i < taskValues.length; i++) {
+      if (String(taskValues[i][0] || "").trim() === taskId) {
+        targetRow = i + 2;
+        break;
+      }
+    }
+  }
+
+  const row = [[
+    taskId,
+    task.date || "",
+    Number(task.status || 0),
+    !!complete,
+    Number(orderCount || 0),
+    Number(taskTotal || 0),
+    updatedAt || new Date()
+  ]];
+
+  if (targetRow) sh.getRange(targetRow, 1, 1, row[0].length).setValues(row);
+  else sh.getRange(sh.getLastRow() + 1, 1, 1, row[0].length).setValues(row);
+
+  sh.getRange(2, 1, Math.max(1, sh.getLastRow() - 1), 1).setNumberFormat("@");
+  if (sh.getLastRow() > 1) {
+    sh.getRange(2, 7, sh.getLastRow() - 1, 1).setNumberFormat("dd/MM/yyyy HH:mm:ss");
+  }
+
+  try {
+    if (!sh.isSheetHidden()) sh.hideSheet();
+  } catch (_) {}
+}
+
 
 function jsonOutput_(obj) {
   return ContentService

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.37
+- Adiciona a automação **Relatório Parcel Sweeper** na aba Auto Tarefas.
+- A cada 1 hora consulta as 5 tarefas mais recentes da estação 5264.
+- Tarefas em status 4 têm todas as páginas de pedidos coletadas e sincronizadas.
+- Tarefas em status 5 consultam primeiro a planilha; tarefas já completas não são coletadas nem enviadas novamente.
+- Quando uma tarefa status 5 ainda não estiver completa, faz uma coleta final e marca a tarefa como completa após confirmar a quantidade de pedidos.
+- Cria/atualiza a aba `Relatório Parcel Sweeper` e mantém um controle interno oculto por tarefa.
+- Inclui no pacote o Apps Script atualizado em `extension/Code_Conferencia_Automacoes.gs`.
+
 ## 1.5.36
 - Remove o fundo do ícone enviado pelo usuário e gera os PNGs com transparência.
 

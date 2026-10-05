@@ -1749,6 +1749,523 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
+const PARCEL_SWEEPER_SYNC_ENDPOINT = AUDIT_SYNC_ENDPOINT;
+const PARCEL_SWEEPER_ALARM_NAME = 'spx-toolkit-parcel-sweeper-auto-run';
+const PARCEL_SWEEPER_INTERVAL_MINUTES = 60;
+const PARCEL_SWEEPER_MAX_RUNNING_MS = 12 * 60 * 1000;
+const PARCEL_SWEEPER_STATION_ID = 5264;
+const PARCEL_SWEEPER_TASK_LIMIT = 5;
+const PARCEL_SWEEPER_ORDER_PAGE_SIZE = 24;
+const PARCEL_SWEEPER_ORDER_CONCURRENCY = 4;
+const PARCEL_SWEEPER_SUMMARY_HEADERS = [
+  'Data',
+  'Tarefa PS',
+  'Status',
+  'Planilha',
+  'Pedidos',
+  'Resultado'
+];
+
+function getParcelSweeperDefaultState() {
+  return {
+    enabled: true,
+    running: false,
+    lastRunAt: 0,
+    nextRunAt: Date.now() + PARCEL_SWEEPER_INTERVAL_MINUTES * 60 * 1000,
+    lastStatus: 'Automação ativa.',
+    lastTasks: 0,
+    lastOrders: 0,
+    lastErrors: 0,
+    lastHeaders: PARCEL_SWEEPER_SUMMARY_HEADERS,
+    lastRows: []
+  };
+}
+
+async function getParcelSweeperState() {
+  const obj = await chrome.storage.local.get(['parcelSweeperAuto']);
+  return { ...getParcelSweeperDefaultState(), ...(obj.parcelSweeperAuto || {}) };
+}
+
+async function setParcelSweeperState(patch) {
+  const current = await getParcelSweeperState();
+  const next = { ...current, ...patch };
+  await chrome.storage.local.set({ parcelSweeperAuto: next });
+  return next;
+}
+
+function isParcelSweeperRunStale(state) {
+  return !!state.running &&
+    Number(state.lastRunAt || 0) > 0 &&
+    (Date.now() - Number(state.lastRunAt || 0)) > PARCEL_SWEEPER_MAX_RUNNING_MS;
+}
+
+async function ensureParcelSweeperAlarm() {
+  const state = await getParcelSweeperState();
+  await chrome.alarms.clear(PARCEL_SWEEPER_ALARM_NAME);
+  if (!state.enabled) return;
+
+  const when = Date.now() + PARCEL_SWEEPER_INTERVAL_MINUTES * 60 * 1000;
+  await chrome.alarms.create(PARCEL_SWEEPER_ALARM_NAME, { when });
+  await setParcelSweeperState({ nextRunAt: when });
+}
+
+function parcelSweeperSpxRunner(payload) {
+  return (async () => {
+    const stationId = Math.max(1, Number(payload?.stationId || 5264));
+    const mode = String(payload?.mode || 'list');
+    const pageSize = Math.max(1, Number(payload?.pageSize || 24));
+    const concurrency = Math.max(1, Math.min(6, Number(payload?.concurrency || 4)));
+
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function fetchJson(url) {
+      let lastError;
+
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          const response = await window.fetch(url, {
+            method: 'GET',
+            credentials: 'include',
+            headers: { Accept: 'application/json, text/plain, */*' }
+          });
+
+          const text = await response.text();
+          let json;
+
+          try {
+            json = JSON.parse(text);
+          } catch (_) {
+            throw new Error(text.slice(0, 300) || `HTTP ${response.status}`);
+          }
+
+          if (!response.ok || Number(json?.retcode || 0) !== 0) {
+            throw new Error(json?.message || json?.error || `HTTP ${response.status}`);
+          }
+
+          return json;
+        } catch (error) {
+          lastError = error;
+          if (attempt === 3) break;
+          await wait(500 * attempt);
+        }
+      }
+
+      throw lastError || new Error('Falha ao consultar API do Parcel Sweeper.');
+    }
+
+    if (mode === 'list') {
+      const url = `/api/in-station/parcel/v2/task/list?station_id=${encodeURIComponent(stationId)}&pageno=1&count=50`;
+      const json = await fetchJson(url);
+      const list = Array.isArray(json?.data?.list) ? json.data.list : [];
+      const limit = Math.max(1, Number(payload?.taskLimit || 5));
+
+      return {
+        ok: true,
+        total: Number(json?.data?.total || list.length),
+        tasks: list.slice(0, limit)
+      };
+    }
+
+    if (mode !== 'orders') {
+      throw new Error('Modo inválido do coletor Parcel Sweeper.');
+    }
+
+    const taskId = String(payload?.taskId || '').trim();
+    if (!taskId) throw new Error('task_id do Parcel Sweeper não informado.');
+
+    async function fetchPage(page) {
+      const url = `/api/in-station/parcel/task/order/search?station_id=${encodeURIComponent(stationId)}&pageno=${encodeURIComponent(page)}&count=${encodeURIComponent(pageSize)}&task_id=${encodeURIComponent(taskId)}`;
+      const json = await fetchJson(url);
+      const data = json?.data || {};
+      return {
+        page,
+        total: Number(data.total || 0),
+        list: Array.isArray(data.list) ? data.list : []
+      };
+    }
+
+    const first = await fetchPage(1);
+    const total = Math.max(0, Number(first.total || first.list.length));
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const pageResults = new Array(pages);
+    pageResults[0] = first;
+    let nextPage = 2;
+
+    async function worker() {
+      while (true) {
+        const page = nextPage;
+        nextPage += 1;
+        if (page > pages) return;
+        pageResults[page - 1] = await fetchPage(page);
+      }
+    }
+
+    const workerCount = Math.min(concurrency, Math.max(0, pages - 1));
+    if (workerCount > 0) {
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    }
+
+    const byShipment = new Map();
+    for (const result of pageResults) {
+      for (const order of (result?.list || [])) {
+        const shipmentId = String(order?.shipment_id || '').trim();
+        if (!shipmentId) continue;
+        byShipment.set(shipmentId, order);
+      }
+    }
+
+    const orders = Array.from(byShipment.values());
+
+    return {
+      ok: true,
+      taskId,
+      total,
+      pages,
+      pageSize,
+      orders
+    };
+  })();
+}
+
+async function executeParcelSweeperRunnerWithRetry(tabId, payload) {
+  let lastErr;
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const injected = await withTimeout(chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: parcelSweeperSpxRunner,
+        args: [payload]
+      }), PARCEL_SWEEPER_MAX_RUNNING_MS, 'Tempo limite da coleta do Parcel Sweeper excedido.');
+
+      const result = injected?.[0]?.result;
+      if (!result?.ok) throw new Error(result?.error || 'Falha ao consultar Parcel Sweeper na SPX.');
+      return result;
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientChromePortError(err) || attempt === 3) break;
+      await sleep(1200 * attempt);
+    }
+  }
+
+  throw new Error(normalizeChromeExecutionError(lastErr));
+}
+
+async function findReadySpxTabForParcelSweeper() {
+  const tabs = await chrome.tabs.query({ url: 'https://spx.shopee.com.br/*' });
+  const candidates = tabs
+    .filter(tab => tab?.id && String(tab.url || '').startsWith('https://spx.shopee.com.br/'))
+    .sort((a, b) => Number(b.active || false) - Number(a.active || false));
+
+  return candidates.find(tab => tab.status === 'complete') || candidates[0] || null;
+}
+
+async function getParcelSweeperSheetStatus(taskIds) {
+  const ids = Array.from(new Set((taskIds || []).map(id => String(id || '').trim()).filter(Boolean)));
+  if (!ids.length) return {};
+
+  const response = await requestJson(PARCEL_SWEEPER_SYNC_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: 'parcelSweeperStatus',
+      taskIds: ids
+    }),
+    timeoutMs: 60 * 1000
+  });
+
+  if (response && response.ok === false) {
+    throw new Error(response.error || 'Falha ao consultar tarefas do Parcel Sweeper na planilha.');
+  }
+
+  return response?.tasks || {};
+}
+
+async function sendParcelSweeperTask(task, orders, complete) {
+  const response = await requestJson(PARCEL_SWEEPER_SYNC_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: 'parcelSweeperImport',
+      sheetName: 'Relatório Parcel Sweeper',
+      task,
+      orders,
+      complete: !!complete
+    }),
+    timeoutMs: 4 * 60 * 1000
+  });
+
+  if (response && response.ok === false) {
+    throw new Error(response.error || 'Falha ao importar Parcel Sweeper na planilha.');
+  }
+
+  return response;
+}
+
+async function runParcelSweeperFlow(source = 'alarm') {
+  let state = await getParcelSweeperState();
+  const busyObj = await chrome.storage.local.get(['spxToolkitBusy']);
+  const busy = busyObj.spxToolkitBusy || {};
+
+  if (!state.enabled) return { skipped: true, reason: 'Automação desativada.' };
+
+  if (isParcelSweeperRunStale(state)) {
+    state = await setParcelSweeperState({
+      running: false,
+      lastStatus: 'Execução anterior expirou e foi liberada.'
+    });
+  }
+
+  if (state.running) return { skipped: true, reason: 'Automação já está rodando.' };
+
+  if (busy.running) {
+    await setParcelSweeperState({
+      lastStatus: `Ignorado: ${busy.scope || 'extensão'} em execução.`,
+      nextRunAt: Date.now() + PARCEL_SWEEPER_INTERVAL_MINUTES * 60 * 1000
+    });
+    return { skipped: true, reason: 'Extensão ocupada.' };
+  }
+
+  if (!PARCEL_SWEEPER_SYNC_ENDPOINT || !/^https?:\/\//i.test(PARCEL_SWEEPER_SYNC_ENDPOINT)) {
+    throw new Error('Endpoint da planilha do Parcel Sweeper não está configurado.');
+  }
+
+  await setParcelSweeperState({
+    running: true,
+    lastStatus: 'Consultando as 5 tarefas mais recentes do Parcel Sweeper...',
+    lastRunAt: Date.now()
+  });
+
+  const summaryRows = [];
+  let totalOrders = 0;
+  let errors = 0;
+
+  try {
+    const tab = await findReadySpxTabForParcelSweeper();
+    if (!tab?.id) throw new Error('Nenhuma aba SPX encontrada. Abra a SPX logada em uma aba.');
+    if (tab.status !== 'complete') throw new Error('A aba SPX ainda está carregando. A próxima execução tentará novamente.');
+
+    const listResult = await executeParcelSweeperRunnerWithRetry(tab.id, {
+      mode: 'list',
+      stationId: PARCEL_SWEEPER_STATION_ID,
+      taskLimit: PARCEL_SWEEPER_TASK_LIMIT
+    });
+
+    const tasks = Array.isArray(listResult.tasks)
+      ? listResult.tasks.slice(0, PARCEL_SWEEPER_TASK_LIMIT)
+      : [];
+
+    const sheetStatus = await getParcelSweeperSheetStatus(tasks.map(task => task?.task_id));
+
+    for (let i = 0; i < tasks.length; i += 1) {
+      const task = tasks[i] || {};
+      const taskId = String(task.task_id || '').trim();
+      const taskStatus = Number(task.status || 0);
+      const taskDate = String(task.date || '');
+      const known = sheetStatus?.[taskId] || {};
+
+      if (!taskId) continue;
+
+      await setParcelSweeperState({
+        lastStatus: `Tarefa ${i + 1}/${tasks.length}: ${taskId} • status ${taskStatus}.`
+      });
+
+      if (taskStatus === 5 && known.complete === true && Number(known.orderCount || 0) >= Number(task.total || 0)) {
+        summaryRows.push([
+          taskDate,
+          taskId,
+          taskStatus,
+          'Completa',
+          Number(known.orderCount || task.total || 0),
+          'Já completa na planilha • nenhuma nova coleta'
+        ]);
+        continue;
+      }
+
+      if (taskStatus !== 4 && taskStatus !== 5) {
+        summaryRows.push([
+          taskDate,
+          taskId,
+          taskStatus,
+          known.complete ? 'Completa' : 'Sem atualização',
+          Number(known.orderCount || 0),
+          'Status ignorado'
+        ]);
+        continue;
+      }
+
+      try {
+        const orderResult = await executeParcelSweeperRunnerWithRetry(tab.id, {
+          mode: 'orders',
+          stationId: PARCEL_SWEEPER_STATION_ID,
+          taskId,
+          pageSize: PARCEL_SWEEPER_ORDER_PAGE_SIZE,
+          concurrency: PARCEL_SWEEPER_ORDER_CONCURRENCY
+        });
+
+        const orders = Array.isArray(orderResult.orders) ? orderResult.orders : [];
+        const importResponse = await sendParcelSweeperTask(task, orders, taskStatus === 5);
+        const imported = Number(importResponse?.orderCount ?? orders.length ?? 0);
+        const isComplete = importResponse?.complete === true;
+        totalOrders += imported;
+
+        summaryRows.push([
+          taskDate,
+          taskId,
+          taskStatus,
+          isComplete ? 'Completa' : 'Em andamento',
+          imported,
+          taskStatus === 5
+            ? (isComplete ? 'Coleta final enviada e tarefa marcada como completa' : 'Coleta final enviada, mas a planilha ainda não confirmou completude')
+            : 'Snapshot atualizado na planilha'
+        ]);
+      } catch (taskError) {
+        errors += 1;
+        summaryRows.push([
+          taskDate,
+          taskId,
+          taskStatus,
+          known.complete ? 'Completa' : 'Erro',
+          Number(known.orderCount || 0),
+          'Erro: ' + String(taskError?.message || taskError)
+        ]);
+      }
+    }
+
+    await setParcelSweeperState({
+      running: false,
+      lastStatus: `Auto concluído • ${tasks.length} tarefa(s) verificadas • ${totalOrders} pedido(s) coletados • ${errors} erro(s).`,
+      lastTasks: tasks.length,
+      lastOrders: totalOrders,
+      lastErrors: errors,
+      lastHeaders: PARCEL_SWEEPER_SUMMARY_HEADERS,
+      lastRows: summaryRows,
+      nextRunAt: Date.now() + PARCEL_SWEEPER_INTERVAL_MINUTES * 60 * 1000
+    });
+
+    return {
+      ok: errors === 0,
+      taskCount: tasks.length,
+      orderCount: totalOrders,
+      errors,
+      rows: summaryRows
+    };
+  } catch (err) {
+    errors += 1;
+    await setParcelSweeperState({
+      running: false,
+      lastStatus: 'Erro no auto: ' + String(err?.message || err),
+      lastTasks: summaryRows.length,
+      lastOrders: totalOrders,
+      lastErrors: errors,
+      lastHeaders: PARCEL_SWEEPER_SUMMARY_HEADERS,
+      lastRows: summaryRows,
+      nextRunAt: Date.now() + PARCEL_SWEEPER_INTERVAL_MINUTES * 60 * 1000
+    });
+
+    return { ok: false, error: String(err?.message || err), errors };
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  ensureParcelSweeperAlarm().catch(() => {});
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureParcelSweeperAlarm().catch(() => {});
+});
+
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === PARCEL_SWEEPER_ALARM_NAME) {
+    runParcelSweeperFlow('alarm').finally(() => ensureParcelSweeperAlarm().catch(() => {}));
+  }
+});
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg) return;
+
+  if (msg.type === 'PARCEL_SWEEPER_STATUS') {
+    (async () => {
+      try {
+        let state = await getParcelSweeperState();
+
+        if (isParcelSweeperRunStale(state)) {
+          state = await setParcelSweeperState({
+            running: false,
+            lastStatus: 'Execução anterior expirou e foi liberada.',
+            nextRunAt: Date.now() + PARCEL_SWEEPER_INTERVAL_MINUTES * 60 * 1000
+          });
+          await ensureParcelSweeperAlarm();
+        }
+
+        sendResponse({ ok: true, data: state });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err?.message || err) });
+      }
+    })();
+    return true;
+  }
+
+  if (msg.type === 'PARCEL_SWEEPER_SET_ENABLED') {
+    (async () => {
+      try {
+        const enabled = !!msg.enabled;
+        const patch = {
+          enabled,
+          lastStatus: enabled ? 'Automação ativa.' : 'Automação desativada.'
+        };
+
+        if (enabled) {
+          patch.nextRunAt = Date.now() + PARCEL_SWEEPER_INTERVAL_MINUTES * 60 * 1000;
+        }
+
+        const state = await setParcelSweeperState(patch);
+        await ensureParcelSweeperAlarm();
+        sendResponse({ ok: true, data: state });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err?.message || err) });
+      }
+    })();
+    return true;
+  }
+
+  if (msg.type === 'PARCEL_SWEEPER_RUN_NOW') {
+    (async () => {
+      try {
+        const data = await runParcelSweeperFlow('manual-message');
+        await ensureParcelSweeperAlarm();
+        sendResponse({ ok: true, data });
+      } catch (err) {
+        await ensureParcelSweeperAlarm().catch(() => {});
+        sendResponse({ ok: false, error: String(err?.message || err) });
+      }
+    })();
+    return true;
+  }
+
+  if (msg.type === 'PARCEL_SWEEPER_CLEAR_RESULTS') {
+    (async () => {
+      try {
+        const state = await setParcelSweeperState({
+          lastTasks: 0,
+          lastOrders: 0,
+          lastErrors: 0,
+          lastHeaders: PARCEL_SWEEPER_SUMMARY_HEADERS,
+          lastRows: [],
+          lastStatus: 'Resultado limpo.'
+        });
+
+        sendResponse({ ok: true, data: state });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err?.message || err) });
+      }
+    })();
+    return true;
+  }
+});
+
+
 const PENDING_RETURNS_SYNC_ENDPOINT = AUDIT_SYNC_ENDPOINT;
 const PENDING_RETURNS_ALARM_NAME = 'spx-toolkit-pending-returns-auto-run';
 const PENDING_RETURNS_INTERVAL_MINUTES = 60;

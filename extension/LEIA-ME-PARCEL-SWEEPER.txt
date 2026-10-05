@@ -1,0 +1,21 @@
+RELATÓRIO PARCEL SWEEPER
+
+1. Abra o projeto Apps Script que hoje atende a automação Conferência Auto.
+2. Substitua/atualize o código pelo conteúdo de Code_Conferencia_Automacoes.gs deste pacote.
+3. No Apps Script, vá em Implantar > Gerenciar implantações.
+4. Edite a implantação do Web App, selecione uma nova versão e implante.
+5. Mantendo a mesma implantação, a URL do Web App continua a mesma e não é necessário alterar a extensão.
+6. Recarregue a extensão no Chrome.
+
+Funcionamento:
+- intervalo: 1 hora;
+- estação: 5264;
+- consulta somente as 5 tarefas mais recentes;
+- status 4: coleta todas as páginas e atualiza o snapshot da tarefa;
+- status 5: consulta a planilha antes; se já estiver completa, não busca nem envia novamente;
+- status 5 ainda não completo: coleta uma última vez e só marca como completa quando a quantidade coletada atingir o total informado pela tarefa.
+
+Aba de dados: Relatório Parcel Sweeper
+Controle interno: _Parcel Sweeper Controle (oculta)
+
+Observação: para a coleta automática funcionar, mantenha o Chrome aberto com uma aba da SPX autenticada.

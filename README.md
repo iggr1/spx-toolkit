@@ -44,3 +44,9 @@ Branch: `main`.
 ## Ícone
 
 Os ícones da extensão foram substituídos por uma chave de boca laranja em 16, 48 e 128 px.
+## Relatório Parcel Sweeper
+
+A aba **Auto Tarefas** inclui a automação `Relatório Parcel Sweeper`, executada a cada 1 hora. Ela consulta as 5 tarefas mais recentes da estação `5264`, coleta todas as páginas dos pedidos quando necessário e grava a base na aba `Relatório Parcel Sweeper`. Para usar a sessão autenticada, o Chrome precisa estar aberto com alguma aba da SPX logada.
+
+O arquivo `extension/Code_Conferencia_Automacoes.gs` precisa estar publicado no mesmo Web App do Apps Script usado pela automação de Conferência. Depois de substituir o código no Apps Script, atualize a implantação do Web App. Mantendo a mesma implantação, a URL usada pela extensão continua a mesma.
+
